@@ -34,57 +34,100 @@ Just add this line in Packages/manifest.json:
 By right-clicking the `Hierarchy > Behavior Tree > Root`
 ### 2) Create any nested nodes you need 
 (Selector/Sequence/Repeater) doing the same way as shown in first step.
+![nodes-creation](https://i.imgur.com/huR6crY.png)
 ### 3) Create your own action or conditional node.
 To make it you need to create a pair: a component and a system.
 
 Action Node example:
 
 ```csharp
-
-// 1) Create an action node component
-// and add this attribute (optional).
+// 1) Create an action node component and (optional) add this attribute.
 [GenerateAuthoringComponent]
 public struct SeekEnemy : IComponentData { }
 
 public sealed class BTSeekEnemySystem : SystemBase
-    {
-        protected override void OnUpdate()
-        {
-            var beginSimECB = this.CreateBeginSimECB();
+{
+   protected override void OnUpdate()
+   {
+       var beginSimECB = this.CreateBeginSimECB();
+       
+       Entities
+           .WithAll<SeekEnemy>() // 2) Simply add it to your Query.
+           .ForEach((Entity agentEntity, 
+           // The parameters below are just up to you. 
+           in EnemyLink enemyLink, 
+           in LocalToWorld ltw,
+           in StoppingDistance stoppingDistance, 
+           in BTActionNodeLink bTNodeLink) => // 3) But don't forget to add this component in the end.
+           {
+               var position = GetComponent<LocalToWorld>(enemyLink.Value).Position;
 
-            var visiblesBFE = GetBufferFromEntity<VisibleElement>();
-
-            Entities
-                // 2) Simply add it to your Query.
-                .WithAll<SeekEnemy>() 
-                .ForEach((Entity agentEntity, 
-                // The parameters below are just up to you. 
-                in EnemyLink enemyLink, 
-                in LocalToWorld ltw,
-                in StoppingDistance stoppingDistance, 
-                // 3) But don't forget to add this component in the end. It's a reference to a current `Action Node`.
-                in BTActionNodeLink bTNodeLink) => 
-                {
-                    var position = GetComponent<LocalToWorld>(enemyLink.Value).Position;
-
-                    if (math.length((position - ltw.Position)) < stoppingDistance.Value)
-                    {
-                        // 4) When you decided that the action was completed successfully, then you need to send the result.
-                        beginSimECB.AddComponent(bTNodeLink.Value, BTResult.Success); 
-                    }
-                    else
-                        beginSimECB.AddComponent(agentEntity, new MoveToDestinationRequest() { Position = position, Speed = 1f });
-                })
-                .ScheduleParallel();
-        }
-    }
+               if (math.length((position - ltw.Position)) < stoppingDistance.Value)
+               {
+                   // 4) When you decided that the action was completed successfully, then you need to send the result.
+                   beginSimECB.AddComponent(bTNodeLink.Value, BTResult.Success); 
+               }
+               else
+                   beginSimECB.AddComponent(agentEntity, new MoveToDestinationRequest() { Position = position, Speed = 1f });
+           })
+           .ScheduleParallel();
+   }
+}
 ```
 
+Conditional Node example is very similar except two things:
+
+```csharp
+
+// 1) NOTE: in this case we need to implement interface IConditional. (It's only for conversion/validation purposes, not for runtime)
+[GenerateAuthoringComponent]
+public struct BTIsEnemyReachable : IComponentData, IConditional{ }
+
+public sealed class BTIsEnemyReachableSystem : SystemBase
+{
+    protected override void OnUpdate()
+    {
+        var beginSimECB = this.CreateBeginSimECB();
+
+        Entities
+            .WithAll<BTIsEnemyReachable>()
+            .ForEach(
+            (DynamicBuffer<InteractableElement> interactableElements, 
+            in EnemyLink enemyLink,
+            in Name name,
+            // 2) NOTE: we need to pass a Conditional Node reference.
+            in BTConditionalNodeLink bTNodeLink) =>
+            {
+                for (int i = 0; i < interactableElements.Length; i++)
+                {
+                    if (interactableElements[i].value == enemyLink.Value)
+                    {
+                        beginSimECB.AddComponent(bTNodeLink.Value, BTResult.Success);
+                        return;
+                    }
+                }
+                // you also able to send "Fail" results.
+                beginSimECB.AddComponent(bTNodeLink.Value, BTResult.Fail);
+            })
+            .WithoutBurst()
+            .Run();
+    }
+}
+```
+### 4) Add your newly created nodes in the tree
+// TODO
+### 5) Connect tree to agent
+// TODO
+
+# Advanced Tips
+## How to use conditional aborts
+// TODO (basic usage, priorities)
+## How to react on state changes
+// TODO (enter/exit events)
 
 # FAQ
 
 ## Is it posible to use nested trees? 
-
 Yes. Since the tree is just a prefab it's easy to make using nested prefabs feature.
 
 
