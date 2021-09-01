@@ -377,7 +377,7 @@ namespace Nanory.Unity.Entities.BehaviorTree
         private Entity DrillDownToLeftLeaf(Entity origin)
         {
             var bfe = GetBufferFromEntity<BTChildElement>(true);
-            return bfe.Exists(origin) ? DrillDownToLeftLeaf(bfe[origin][0].Value) : origin;
+            return bfe.HasComponent(origin) ? DrillDownToLeftLeaf(bfe[origin][0].Value) : origin;
         }
     }
 }
